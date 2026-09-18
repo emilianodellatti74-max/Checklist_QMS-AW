@@ -1,0 +1,16 @@
+{
+  "name": "Checklist di audit QMS-AW",
+  "short_name": "Checklist QMS",
+  "description": "Compilazione delle checklist di audit QMS-AW, anche senza rete, con invio via email al gestionale.",
+  "lang": "it",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#EEF1F3",
+  "theme_color": "#1B2430",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

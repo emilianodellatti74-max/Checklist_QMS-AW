@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data:; manifest-src 'self'; worker-src 'self'">
+<meta name="theme-color" content="#1B2430">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Checklist QMS-AW">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>Checklist di audit - QMS-AW</title>
+<style>
+  :root{
+    --ink:#1B2430; --ink-soft:#4A5568; --paper:#EEF1F3; --panel:#FFFFFF; --line:#D7DCE1;
+    --locked-bg:#E7E9EC; --locked-text:#5B6572; --amber:#B4791F; --amber-soft:#F2E1C4;
+    --green:#3F7D58; --green-soft:#DCEBE1; --red:#A23B2E; --red-soft:#F3DAD6;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;background:var(--paper);color:var(--ink);font-family:'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;-webkit-font-smoothing:antialiased;}
+  .mono{font-family:'Consolas','Roboto Mono','Courier New',monospace;}
+  .app{max-width:760px;margin:0 auto;padding:14px 14px 120px;}
+
+  .app-header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid var(--ink);padding-bottom:10px;margin-bottom:14px;gap:10px;}
+  .app-header h1{font-size:17px;margin:0 0 3px;font-weight:600;}
+  .app-header .sub{font-size:12px;color:var(--ink-soft);}
+
+  .intestazione{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:10px 14px;margin-bottom:14px;}
+  .intestazione .riga{display:flex;gap:10px;padding:3px 0;font-size:12.5px;align-items:baseline;}
+  .intestazione .et{color:var(--ink-soft);flex:0 0 120px;}
+  .intestazione .vl{font-weight:600;}
+
+  .section-title{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.3px;border-bottom:1.5px solid var(--line);padding-bottom:5px;margin:22px 0 10px;}
+
+  button{font-family:inherit;font-size:14px;font-weight:600;padding:11px 16px;border-radius:3px;border:1.5px solid var(--ink);background:var(--ink);color:#fff;cursor:pointer;min-height:44px;}
+  button.ghost{background:transparent;color:var(--ink);}
+  button.small{padding:7px 12px;font-size:12.5px;min-height:36px;}
+  button.wide{width:100%;}
+  button:disabled{opacity:.35;}
+  input[type=text],input[type=email],textarea{width:100%;font-family:inherit;font-size:15px;padding:10px 11px;border:1.5px solid var(--line);border-radius:3px;background:var(--panel);color:var(--ink);}
+  textarea{min-height:60px;resize:vertical;}
+  input:focus,textarea:focus{outline:none;border-color:var(--ink);}
+  label.field-label{display:block;font-size:12px;color:var(--ink-soft);margin:12px 0 5px;font-weight:500;}
+
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:14px;margin-bottom:12px;}
+  .card h2{font-size:15px;margin:0 0 4px;}
+  .card p{font-size:12.5px;color:var(--ink-soft);margin:4px 0 10px;line-height:1.45;}
+  .riga-azioni{display:flex;gap:8px;flex-wrap:wrap;}
+  .riga-azioni button{flex:1;min-width:130px;}
+
+  .stato{font-size:10.5px;text-transform:uppercase;letter-spacing:.4px;padding:3px 8px;border-radius:3px;white-space:nowrap;color:var(--amber);background:var(--amber-soft);}
+  .stato.pronta{color:var(--ink);background:var(--locked-bg);}
+  .stato.inviata{color:var(--green);background:var(--green-soft);}
+
+  .chips{display:flex;gap:8px;overflow-x:auto;padding:4px 0 8px;position:sticky;top:0;background:var(--paper);z-index:5;}
+  .chip{flex:0 0 auto;border:1.5px solid var(--line);background:var(--panel);border-radius:3px;padding:8px 12px;font-size:12.5px;display:flex;align-items:center;gap:7px;white-space:nowrap;cursor:pointer;color:var(--ink);font-weight:500;min-height:38px;}
+  .chip.attivo{border-color:var(--ink);font-weight:700;}
+  .chip .dot{width:7px;height:7px;border-radius:50%;background:var(--line);}
+  .chip.davalutare .dot{background:var(--amber);}
+  .chip.nc .dot{background:var(--red);}
+  .chip.capa .dot{background:var(--ink);}
+
+  .req{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--line);border-radius:3px;padding:12px 12px 10px;margin-bottom:10px;}
+  .req.fatto{border-left-color:var(--green);}
+  .req.nc{border-left-color:var(--red);}
+  .req.na{border-left-color:var(--locked-text);}
+  .req-top{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:6px;}
+  .rif{font-size:12px;font-weight:700;}
+  .tag{font-size:10.5px;font-weight:600;padding:2px 7px;border-radius:3px;background:var(--locked-bg);color:var(--locked-text);}
+  .tag.ALTA{background:var(--red-soft);color:var(--red);}
+  .tag.MEDIA{background:var(--amber-soft);color:var(--amber);}
+  .tag.capa{background:var(--ink);color:#fff;}
+  .tag.ufficio{background:var(--green-soft);color:var(--green);}
+  .req-testo{font-size:14px;line-height:1.45;margin-bottom:10px;white-space:pre-wrap;}
+  .esiti{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:8px;}
+  .esiti button{background:var(--panel);color:var(--ink);border-color:var(--line);font-size:14px;padding:10px 4px;}
+  .esiti button.sel.ok{background:var(--green);border-color:var(--green);color:#fff;}
+  .esiti button.sel.nc{background:var(--red);border-color:var(--red);color:#fff;}
+  .esiti button.sel.na{background:var(--locked-text);border-color:var(--locked-text);color:#fff;}
+  .errore{font-size:12px;color:var(--red);margin-top:5px;}
+
+  .barra{position:fixed;left:0;right:0;bottom:0;background:var(--panel);border-top:1.5px solid var(--ink);padding:10px 14px calc(10px + env(safe-area-inset-bottom));z-index:10;}
+  .barra .dentro{max-width:760px;margin:0 auto;display:flex;align-items:center;gap:12px;}
+  .barra .conta{font-size:12.5px;color:var(--ink-soft);flex:1;}
+  .barra .conta b{color:var(--ink);}
+  .rail{height:4px;background:var(--line);border-radius:2px;margin-top:5px;overflow:hidden;}
+  .rail span{display:block;height:100%;background:var(--amber);}
+  .rail span.completo{background:var(--green);}
+
+  .riepilogo{font-size:13px;margin:8px 0 12px;}
+  .riepilogo div{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line);}
+  .banner{background:var(--amber-soft);border:1.5px solid var(--amber);border-radius:4px;padding:10px 12px;font-size:12.5px;margin-bottom:12px;}
+  .banner.ok{background:var(--green-soft);border-color:var(--green);}
+  .vuoto{text-align:center;color:var(--ink-soft);font-size:13px;padding:30px 10px;}
+  #avviso{position:fixed;left:50%;transform:translateX(-50%);bottom:90px;max-width:92%;background:var(--ink);color:#fff;font-size:13px;padding:10px 14px;border-radius:4px;box-shadow:0 4px 14px rgba(0,0,0,.25);z-index:20;display:none;}
+  #avviso.errore{background:var(--red);}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="app-header">
+    <div>
+      <h1>Checklist di audit</h1>
+      <div class="sub" id="hdrSub">QMS-AW &mdash; compilazione sul campo, anche senza rete</div>
+    </div>
+    <button class="ghost small" id="btnElenco" onclick="vai('elenco')">Elenco</button>
+  </div>
+  <div id="vista"></div>
+</div>
+<div id="barra"></div>
+<div id="avviso"></div>
+<input type="file" id="fileInput" accept=".txt,.json,text/plain,application/json" hidden>
+
+<script>
+'use strict';
+// ---------------------------------------------------------------------------
+// Checklist di audit QMS-AW sul telefono.
+// Il gestionale invia il file Checklist_audit_<rapporto>.txt (busta VEGA-CL,
+// tipo "modello"); qui si compila anche senza rete e si rimanda il file
+// CL_<rapporto>_<data>.txt (tipo "compilazione") con il menu di condivisione.
+// Busta: {formato, versioneFormato, tipo, payload: <JSON come stringa>,
+// hash: SHA-256 esadecimale dei byte UTF-8 di payload}.
+// ---------------------------------------------------------------------------
+const FORMATO = 'VEGA-CL';
+const VERSIONE_FORMATO = 1;
+const CHIAVE_ARCHIVIO = 'qmsaw_ckm_v1';
+const ESITI = [['Conforme', 'ok'], ['NC', 'nc'], ['N.A.', 'na']];
+
+let archivio = caricaArchivio();
+let corrente = null;
+let vistaAttiva = 'elenco';
+let filtro = 'tutti';
+
+// ---------- archivio sul telefono ----------
+function caricaArchivio(){
+  try{
+    const a = JSON.parse(localStorage.getItem(CHIAVE_ARCHIVIO) || 'null');
+    if(a && a.checklist) return a;
+  }catch(e){}
+  return { impostazioni:{ email:'', auditor:'' }, checklist:{} };
+}
+function salvaArchivio(){
+  try{ localStorage.setItem(CHIAVE_ARCHIVIO, JSON.stringify(archivio)); return true; }
+  catch(e){ avviso('Memoria del telefono piena o non disponibile: il lavoro non è stato salvato.', true); return false; }
+}
+// chiede al sistema di non cancellare i dati dell'app (utile su iOS e Android)
+if(navigator.storage && navigator.storage.persist){ navigator.storage.persist().catch(() => {}); }
+
+function esc(v){
+  return String(v === null || v === undefined ? '' : v)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function oraLocale(d){
+  d = d || new Date();
+  const p = n => String(n).padStart(2, '0');
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + 'T' +
+         p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
+}
+function dataIT(iso){
+  const m = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2}))?/.exec(iso || '');
+  return m ? m[3] + '/' + m[2] + '/' + m[1] + (m[4] ? ' ' + m[4] + ':' + m[5] : '') : '';
+}
+function avviso(testo, errore){
+  const el = document.getElementById('avviso');
+  el.textContent = testo;
+  el.className = errore ? 'errore' : '';
+  el.style.display = 'block';
+  clearTimeout(avviso.t);
+  avviso.t = setTimeout(() => { el.style.display = 'none'; }, errore ? 6000 : 3500);
+}
+
+// ---------- SHA-256 e identificativi ----------
+function esadecimale(b){ return Array.from(b, x => x.toString(16).padStart(2, '0')).join(''); }
+function ror(x, n){ return (x >>> n) | (x << (32 - n)); }
+// Calcolo in JavaScript, usato quando crypto.subtle non c'e' (pagina non in HTTPS).
+function sha256Js(m){
+  const K = [0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
+             0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,
+             0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,
+             0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,
+             0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,
+             0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,
+             0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,
+             0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2];
+  const H = [0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19];
+  const l = m.length, buf = new Uint8Array(((l + 9 + 63) >> 6) << 6);
+  buf.set(m); buf[l] = 0x80;
+  const dv = new DataView(buf.buffer), bit = l * 8;
+  dv.setUint32(buf.length - 4, bit >>> 0);
+  dv.setUint32(buf.length - 8, Math.floor(bit / 0x100000000));
+  const W = new Array(64);
+  for(let i = 0; i < buf.length; i += 64){
+    for(let t = 0; t < 16; t++) W[t] = dv.getUint32(i + t * 4);
+    for(let t = 16; t < 64; t++){
+      const s0 = ror(W[t-15], 7) ^ ror(W[t-15], 18) ^ (W[t-15] >>> 3);
+      const s1 = ror(W[t-2], 17) ^ ror(W[t-2], 19) ^ (W[t-2] >>> 10);
+      W[t] = (W[t-16] + s0 + W[t-7] + s1) >>> 0;
+    }
+    let a = H[0], b = H[1], c = H[2], d = H[3], e = H[4], f = H[5], g = H[6], h = H[7];
+    for(let t = 0; t < 64; t++){
+      const t1 = (h + (ror(e, 6) ^ ror(e, 11) ^ ror(e, 25)) + ((e & f) ^ (~e & g)) + K[t] + W[t]) >>> 0;
+      const t2 = ((ror(a, 2) ^ ror(a, 13) ^ ror(a, 22)) + ((a & b) ^ (a & c) ^ (b & c))) >>> 0;
+      h = g; g = f; f = e; e = (d + t1) >>> 0; d = c; c = b; b = a; a = (t1 + t2) >>> 0;
+    }
+    H[0] = (H[0] + a) >>> 0; H[1] = (H[1] + b) >>> 0; H[2] = (H[2] + c) >>> 0; H[3] = (H[3] + d) >>> 0;
+    H[4] = (H[4] + e) >>> 0; H[5] = (H[5] + f) >>> 0; H[6] = (H[6] + g) >>> 0; H[7] = (H[7] + h) >>> 0;
+  }
+  return H.map(x => x.toString(16).padStart(8, '0')).join('');
+}
+async function sha256Hex(testo){
+  const dati = new TextEncoder().encode(testo);
+  if(window.isSecureContext && window.crypto && crypto.subtle){
+    try{ return esadecimale(new Uint8Array(await crypto.subtle.digest('SHA-256', dati))); }catch(e){}
+  }
+  return sha256Js(dati);
+}
+function nuovoUuid(){
+  if(window.isSecureContext && crypto.randomUUID) return crypto.randomUUID();
+  const b = crypto.getRandomValues(new Uint8Array(16));
+  b[6] = (b[6] & 0x0f) | 0x40; b[8] = (b[8] & 0x3f) | 0x80;
+  const h = esadecimale(b);
+  return h.slice(0,8) + '-' + h.slice(8,12) + '-' + h.slice(12,16) + '-' + h.slice(16,20) + '-' + h.slice(20);
+}
+function descriviDispositivo(){
+  const u = navigator.userAgent || '';
+  const m = /Android[^;)]*|iPhone OS [\d_]+|iPad; CPU OS [\d_]+|Windows NT [\d.]+/.exec(u);
+  return (m ? m[0].replace(/_/g, '.') : 'dispositivo') + (navigator.standalone || matchMedia('(display-mode: standalone)').matches ? ' (app)' : ' (browser)');
+}
+
+// ---------- caricamento della checklist ricevuta dall'ufficio ----------
+async function caricaTesto(testo){
+  let busta;
+  testo = String(testo || '').replace(/^﻿/, '');
+  try{ busta = JSON.parse(testo); }catch(e){ throw new Error('Il file non è una checklist QMS-AW (contenuto non leggibile).'); }
+  if(!busta || busta.formato !== FORMATO) throw new Error('Il file non è una checklist QMS-AW.');
+  if(Number(busta.versioneFormato) > VERSIONE_FORMATO) throw new Error("Il file è di una versione più recente: aggiornare l'app.");
+  if(busta.tipo !== 'modello'){
+    throw new Error(busta.tipo === 'compilazione'
+      ? "Questo è un file già compilato, da rimandare all'ufficio: non va caricato qui."
+      : 'Tipo di file non riconosciuto.');
+  }
+  if(typeof busta.payload !== 'string' || (await sha256Hex(busta.payload)) !== String(busta.hash || '').toLowerCase()){
+    throw new Error('Controllo di integrità non superato: il file è danneggiato o è stato modificato.');
+  }
+  const m = JSON.parse(busta.payload);
+  if(m.tipoChecklist !== 'audit' || !Array.isArray(m.voci) || m.voci.length === 0){
+    throw new Error('La checklist non contiene requisiti da valutare.');
+  }
+  const chiave = 'A' + m.idAudit;
+  const prima = archivio.checklist[chiave];
+  const risposte = {};
+  // esiti e note gia' registrati in ufficio
+  m.voci.forEach(v => { if(v.esito || v.nota) risposte[v.id] = { esito: v.esito || '', nota: v.nota || '', ufficio: true }; });
+  // stessa checklist ricaricata (per esempio con requisiti aggiunti): le risposte date qui restano
+  let recuperate = 0;
+  if(prima){
+    m.voci.forEach(v => {
+      const r = prima.risposte[v.id];
+      if(r && !r.ufficio && (r.esito || r.nota)){ risposte[v.id] = { esito: r.esito, nota: r.nota }; recuperate++; }
+    });
+  }
+  archivio.checklist[chiave] = {
+    modello: m, risposte, inizio: prima ? prima.inizio : null,
+    caricata: oraLocale(), stato: 'compilazione', invio: null, inviata: null
+  };
+  salvaArchivio();
+  return { chiave, recuperate, sostituita: !!prima };
+}
+function leggiFile(file){
+  return new Promise((ok, ko) => {
+    const r = new FileReader();
+    r.onload = () => ok(r.result);
+    r.onerror = () => ko(new Error('Impossibile leggere il file.'));
+    r.readAsText(file, 'utf-8');
+  });
+}
+document.getElementById('fileInput').addEventListener('change', async ev => {
+  const f = ev.target.files[0];
+  ev.target.value = '';
+  if(!f) return;
+  try{
+    const r = await caricaTesto(await leggiFile(f));
+    avviso(r.sostituita ? 'Checklist aggiornata' + (r.recuperate ? ': ' + r.recuperate + ' risposte già date sono state mantenute.' : '.') : 'Checklist caricata.');
+    apri(r.chiave);
+  }catch(e){ avviso(e.message, true); }
+});
+
+// ---------- compilazione ----------
+function risposta(id){ return (archivio.checklist[corrente].risposte[id]) || { esito:'', nota:'' }; }
+function contaRisposte(cl){
+  const c = { tot: cl.modello.voci.length, ok: 0, nc: 0, na: 0, mancanti: 0, ncSenzaNota: 0, capa: 0 };
+  cl.modello.voci.forEach(v => {
+    const r = cl.risposte[v.id] || {};
+    if(v.capa) c.capa++;
+    if(r.esito === 'Conforme') c.ok++;
+    else if(r.esito === 'NC'){ c.nc++; if(!String(r.nota || '').trim()) c.ncSenzaNota++; }
+    else if(r.esito === 'N.A.') c.na++;
+    else c.mancanti++;
+  });
+  return c;
+}
+// una modifica dopo la preparazione del file richiede di prepararlo di nuovo
+function modificata(cl){
+  if(!cl.inizio) cl.inizio = oraLocale();
+  cl.invio = null;
+  if(cl.inviata){ cl.giaInviata = cl.inviata; cl.inviata = null; }
+  cl.stato = 'compilazione';
+}
+function rispondi(id, esito){
+  const cl = archivio.checklist[corrente];
+  const r = cl.risposte[id] || { esito:'', nota:'' };
+  r.esito = (r.esito === esito) ? '' : esito;
+  delete r.ufficio;
+  cl.risposte[id] = r;
+  modificata(cl);
+  salvaArchivio();
+  const el = document.getElementById('r_' + id);
+  const v = cl.modello.voci.find(x => String(x.id) === String(id));
+  if(el && v) el.outerHTML = htmlRequisito(v, cl);
+  disegnaBarra();
+  disegnaChips();
+}
+function nota(id, testo){
+  const cl = archivio.checklist[corrente];
+  const r = cl.risposte[id] || { esito:'', nota:'' };
+  r.nota = testo;
+  delete r.ufficio;
+  cl.risposte[id] = r;
+  modificata(cl);
+  salvaArchivio();
+  const err = document.getElementById('err_' + id);
+  if(err) err.style.display = (r.esito === 'NC' && !testo.trim()) ? 'block' : 'none';
+  disegnaBarra();
+}
+function statoRequisito(r){
+  if(r.esito === 'Conforme') return 'fatto';
+  if(r.esito === 'NC') return 'nc';
+  if(r.esito === 'N.A.') return 'na';
+  return '';
+}
+function htmlRequisito(v, cl){
+  const r = cl.risposte[v.id] || { esito:'', nota:'' };
+  const prio = String(v.priorita || '').toUpperCase();
+  return `
+  <div class="req ${statoRequisito(r)}" id="r_${esc(v.id)}">
+    <div class="req-top">
+      <span class="mono rif">${esc(v.rif || '')}</span>
+      ${prio ? `<span class="tag ${esc(prio)}">Priorità ${esc(prio)}</span>` : ''}
+      ${v.capa ? `<span class="tag capa">Verifica CAPA · NC ${esc(v.capa)}</span>` : ''}
+      ${r.ufficio ? '<span class="tag ufficio">già registrato in ufficio</span>' : ''}
+    </div>
+    <div class="req-testo">${esc(v.testo)}</div>
+    <div class="esiti">
+      ${ESITI.map(([es, cls]) => `<button type="button" class="${cls}${r.esito === es ? ' sel ' + cls : ''}" onclick="rispondi(${JSON.stringify(v.id)}, '${es}')">${es}</button>`).join('')}
+    </div>
+    <textarea placeholder="Note ed evidenze${r.esito === 'NC' ? ' (obbligatorie per una NC)' : ''}" oninput="nota(${JSON.stringify(v.id)}, this.value)">${esc(r.nota || '')}</textarea>
+    <div class="errore" id="err_${esc(v.id)}" style="display:${r.esito === 'NC' && !String(r.nota || '').trim() ? 'block' : 'none'}">Descrivi il rilievo: per una NC la nota è obbligatoria.</div>
+  </div>`;
+}
+function visibile(v, cl){
+  const r = cl.risposte[v.id] || {};
+  if(filtro === 'davalutare') return !r.esito;
+  if(filtro === 'nc') return r.esito === 'NC';
+  if(filtro === 'capa') return !!v.capa;
+  return true;
+}
+function disegnaChips(){
+  const el = document.getElementById('chips');
+  if(!el || !corrente) return;
+  const c = contaRisposte(archivio.checklist[corrente]);
+  const voci = [['tutti', 'Tutti', c.tot], ['davalutare', 'Da valutare', c.mancanti], ['nc', 'NC', c.nc], ['capa', 'CAPA', c.capa]];
+  el.innerHTML = voci.filter(x => x[0] !== 'capa' || x[2] > 0).map(([k, t, n]) =>
+    `<button type="button" class="chip ${k}${filtro === k ? ' attivo' : ''}" onclick="impostaFiltro('${k}')"><span class="dot"></span>${t} (${n})</button>`).join('');
+}
+function impostaFiltro(k){ filtro = k; disegna(); }
+function disegnaBarra(){
+  const el = document.getElementById('barra');
+  if(vistaAttiva !== 'compila' || !corrente){ el.innerHTML = ''; return; }
+  const c = contaRisposte(archivio.checklist[corrente]);
+  const fatti = c.tot - c.mancanti, perc = Math.round(fatti * 100 / c.tot);
+  el.innerHTML = `<div class="barra"><div class="dentro">
+      <div class="conta"><b>${fatti}</b> di <b>${c.tot}</b> valutati${c.nc ? ' · <b>' + c.nc + '</b> NC' : ''}
+        <div class="rail"><span class="${c.mancanti ? '' : 'completo'}" style="width:${perc}%"></span></div></div>
+      <button type="button" onclick="concludiDaPulsante()">Concludi</button>
+    </div></div>`;
+}
+function intestazione(m){
+  const riga = (et, vl) => vl ? `<div class="riga"><span class="et">${et}</span><span class="vl">${esc(vl)}</span></div>` : '';
+  return `<div class="intestazione">
+    ${riga('Reparto', m.reparto)}${riga('Nr. rapporto', m.nrRapporto)}${riga('Processo', m.processo)}
+    ${riga('Flotta', m.flotta)}${riga('Anno / ciclo', (m.anno || '') + (m.ciclo ? ' / ' + m.ciclo : ''))}
+    ${riga('Lead auditor', m.leadAuditor)}${riga('Emessa il', dataIT(m.emesso))}
+  </div>`;
+}
+function vistaCompila(){
+  const cl = archivio.checklist[corrente];
+  const m = cl.modello;
+  let html = intestazione(m);
+  if(cl.inviata) html += `<div class="banner ok">Inviata all'ufficio il ${esc(dataIT(cl.inviata))}. Se modifichi un esito dovrai rimandarla.</div>`;
+  else if(cl.giaInviata) html += `<div class="banner">Inviata il ${esc(dataIT(cl.giaInviata))} e poi modificata: premi Concludi e rimandala.</div>`;
+  html += '<div class="chips" id="chips"></div>';
+  let sezione = null, mostrati = 0;
+  m.voci.forEach(v => {
+    if(!visibile(v, cl)) return;
+    if(v.sezione !== sezione){ sezione = v.sezione; html += `<div class="section-title">${esc(sezione || 'Requisiti')}</div>`; }
+    html += htmlRequisito(v, cl);
+    mostrati++;
+  });
+  if(!mostrati) html += '<div class="vuoto">Nessun requisito in questo elenco.</div>';
+  return html;
+}
+function concludiDaPulsante(){ concludi().then(r => { if(!r.ok) avviso(r.motivo, true); }); }
+async function concludi(){
+  const cl = archivio.checklist[corrente];
+  const c = contaRisposte(cl);
+  if(c.mancanti){ filtro = 'davalutare'; disegna(); return { ok:false, motivo:'Mancano ' + c.mancanti + ' requisiti da valutare.' }; }
+  if(c.ncSenzaNota){ filtro = 'nc'; disegna(); return { ok:false, motivo:'Ci sono ' + c.ncSenzaNota + ' NC senza nota: descrivi il rilievo.' }; }
+  const nome = await preparaInvio(cl);
+  vai('invio');
+  return { ok:true, nome };
+}
+// file da inviare: ogni preparazione e' una compilazione nuova, con un uuid nuovo
+async function preparaInvio(cl){
+  const m = cl.modello, c = contaRisposte(cl);
+  const payload = {
+    uuid: nuovoUuid(), tipoChecklist: 'audit', idAudit: m.idAudit, nrRapporto: m.nrRapporto, emesso: m.emesso,
+    processo: m.processo, flotta: m.flotta || '', auditor: archivio.impostazioni.auditor || '',
+    dispositivo: descriviDispositivo(), inizio: cl.inizio || oraLocale(), fine: oraLocale(),
+    conteggi: { conformi: c.ok, nc: c.nc, na: c.na },
+    risposte: m.voci.map(v => { const r = cl.risposte[v.id] || {}; return { id: v.id, esito: r.esito || '', nota: String(r.nota || '').trim() }; })
+  };
+  const testo = JSON.stringify(payload);
+  const busta = { formato: FORMATO, versioneFormato: VERSIONE_FORMATO, tipo: 'compilazione', payload: testo, hash: await sha256Hex(testo) };
+  const ora = new Date(), p = n => String(n).padStart(2, '0');
+  const nome = 'CL_' + String(m.nrRapporto || m.idAudit).replace(/[\\/:*?"<>|\s]/g, '-') + '_' +
+               ora.getFullYear() + p(ora.getMonth() + 1) + p(ora.getDate()) + '-' + p(ora.getHours()) + p(ora.getMinutes()) + '.txt';
+  cl.invio = { uuid: payload.uuid, nome, auditor: payload.auditor, testo: JSON.stringify(busta), preparato: oraLocale() };
+  cl.stato = 'pronta';
+  salvaArchivio();
+  return nome;
+}
+
+// ---------- invio ----------
+function vistaInvio(){
+  const cl = archivio.checklist[corrente];
+  const m = cl.modello, c = contaRisposte(cl), imp = archivio.impostazioni;
+  if(!cl.invio) return '<div class="vuoto">Il file non è pronto: torna alla checklist e premi Concludi.</div>';
+  return intestazione(m) + `
+  <div class="card">
+    <h2>Checklist pronta per l'invio</h2>
+    <p>Il file <span class="mono">${esc(cl.invio.nome)}</span> contiene tutti gli esiti. Invialo all'ufficio qualità:
+       il gestionale lo importa con <b>Importa dal telefono</b>.</p>
+    <div class="riepilogo">
+      <div><span>Conformi</span><b>${c.ok}</b></div>
+      <div><span>NC</span><b>${c.nc}</b></div>
+      <div><span>N.A.</span><b>${c.na}</b></div>
+    </div>
+    <label class="field-label" for="inAuditor">Auditor (grado, cognome e nome)</label>
+    <input type="text" id="inAuditor" value="${esc(imp.auditor)}" onchange="impostaAuditor(this.value)">
+    <label class="field-label">Destinatario</label>
+    <div class="mono" style="font-size:13px;">${esc(destinatario(cl) || 'non impostato: vedi Impostazioni')}</div>
+    <div class="riga-azioni" style="margin-top:14px;">
+      <button type="button" onclick="inviaEmail()">Invia via email</button>
+      <button type="button" class="ghost" onclick="salvaFile()">Salva il file</button>
+    </div>
+    ${cl.inviata ? `<div class="banner ok" style="margin-top:12px;">Inviata il ${esc(dataIT(cl.inviata))}.</div>` : ''}
+  </div>
+  <button type="button" class="ghost wide" onclick="vai('compila')">Torna alla checklist</button>`;
+}
+// l'auditor e' scritto nel file: cambiandolo il file si rifa' (all'uscita dal campo,
+// senza ridisegnare la pagina)
+async function impostaAuditor(v){
+  archivio.impostazioni.auditor = v.trim();
+  salvaArchivio();
+  const cl = archivio.checklist[corrente];
+  if(cl && cl.invio && cl.invio.auditor !== archivio.impostazioni.auditor){
+    if(cl.inviata){ cl.giaInviata = cl.inviata; cl.inviata = null; }
+    await preparaInvio(cl);
+    avviso('File aggiornato con il nome dell\'auditor.');
+  }
+}
+// indirizzo delle Impostazioni o, se vuoto, quello scritto dal gestionale nel file
+function destinatario(cl){
+  return archivio.impostazioni.email || (cl && cl.modello.emailRitorno) || '';
+}
+function fileInvio(){
+  const cl = archivio.checklist[corrente];
+  return new File([cl.invio.testo], cl.invio.nome, { type: 'text/plain' });
+}
+function segnaInviata(){
+  const cl = archivio.checklist[corrente];
+  cl.inviata = oraLocale(); cl.stato = 'inviata';
+  salvaArchivio(); disegna();
+  avviso('Checklist inviata.');
+}
+async function inviaEmail(){
+  const cl = archivio.checklist[corrente];
+  if(!cl.invio) return;
+  const oggetto = '[CHECKLIST] Audit ' + cl.modello.nrRapporto;
+  const email = destinatario(cl);
+  const f = fileInvio();
+  if(navigator.canShare && navigator.canShare({ files: [f] })){
+    try{
+      await navigator.share({ files: [f], title: oggetto, text: oggetto + (email ? ' - destinatario ' + email : '') });
+      segnaInviata();
+    }catch(e){ if(e.name !== 'AbortError') avviso('Condivisione non riuscita: usa Salva il file e allegalo a mano.', true); }
+    return;
+  }
+  // senza condivisione di file: si salva il file e si apre l'email da completare con l'allegato
+  salvaFile();
+  location.href = 'mailto:' + encodeURIComponent(email) + '?subject=' + encodeURIComponent(oggetto) +
+    '&body=' + encodeURIComponent('Allegare il file ' + cl.invio.nome + ' appena salvato nella cartella Download.');
+}
+function salvaFile(){
+  const cl = archivio.checklist[corrente];
+  if(!cl.invio) return;
+  const url = URL.createObjectURL(new Blob([cl.invio.testo], { type: 'text/plain' }));
+  const a = document.createElement('a');
+  a.href = url; a.download = cl.invio.nome;
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 1500);
+  avviso('File salvato: ' + cl.invio.nome);
+}
+
+// ---------- elenco e impostazioni ----------
+function vistaElenco(){
+  const voci = Object.keys(archivio.checklist).map(k => [k, archivio.checklist[k]])
+    .sort((a, b) => String(b[1].caricata).localeCompare(String(a[1].caricata)));
+  let html = `<div class="card">
+    <h2>Carica una checklist</h2>
+    <p>Apri l'email dell'ufficio qualità, salva l'allegato <span class="mono">Checklist_audit_....txt</span> nel telefono e selezionalo qui.</p>
+    <div class="riga-azioni">
+      <button type="button" onclick="document.getElementById('fileInput').click()">Carica checklist</button>
+      <button type="button" class="ghost" onclick="vai('impostazioni')">Impostazioni</button>
+    </div>
+  </div>`;
+  if(!voci.length) return html + '<div class="vuoto">Nessuna checklist sul telefono.</div>';
+  html += '<div class="section-title">Checklist sul telefono</div>';
+  voci.forEach(([k, cl]) => {
+    const m = cl.modello, c = contaRisposte(cl);
+    const stato = cl.inviata ? ['inviata', 'Inviata ' + dataIT(cl.inviata)]
+                : cl.invio ? ['pronta', 'Pronta per l\'invio']
+                : cl.giaInviata ? ['', 'Modificata dopo l\'invio'] : ['', 'In compilazione'];
+    html += `<div class="card">
+      <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;">
+        <h2>Audit <span class="mono">${esc(m.nrRapporto)}</span></h2><span class="stato ${stato[0]}">${esc(stato[1])}</span>
+      </div>
+      <p>${esc(m.processo)}${m.flotta ? ' · flotta ' + esc(m.flotta) : ''} — ${c.tot - c.mancanti} di ${c.tot} valutati${c.nc ? ', ' + c.nc + ' NC' : ''}</p>
+      <div class="riga-azioni">
+        <button type="button" onclick="apri('${k}')">Apri</button>
+        <button type="button" class="ghost" onclick="elimina('${k}')">Elimina</button>
+      </div>
+    </div>`;
+  });
+  return html;
+}
+function vistaImpostazioni(){
+  const imp = archivio.impostazioni;
+  return `<div class="card">
+    <h2>Impostazioni</h2>
+    <label class="field-label" for="inEmail">Email dell'ufficio qualità (destinatario delle checklist)</label>
+    <input type="email" id="inEmail" value="${esc(imp.email)}" oninput="archivio.impostazioni.email=this.value.trim();salvaArchivio()">
+    <label class="field-label" for="inAud">Auditor (grado, cognome e nome)</label>
+    <input type="text" id="inAud" value="${esc(imp.auditor)}" oninput="archivio.impostazioni.auditor=this.value;salvaArchivio()">
+    <p style="margin-top:14px;">I dati restano solo su questo telefono fino all'invio. Su iPhone usare l'app aggiunta alla schermata Home.</p>
+  </div>
+  <button type="button" class="ghost wide" onclick="vai('elenco')">Torna all'elenco</button>`;
+}
+function elimina(k){
+  const cl = archivio.checklist[k];
+  const avv = cl && !cl.inviata ? '\nNon è ancora stata inviata: gli esiti andranno persi.' : '';
+  if(!confirm('Eliminare dal telefono la checklist dell\'audit ' + (cl ? cl.modello.nrRapporto : '') + '?' + avv)) return;
+  delete archivio.checklist[k];
+  salvaArchivio(); disegna();
+}
+function apri(k){ corrente = k; filtro = 'tutti'; vai('compila'); }
+function vai(v){ vistaAttiva = v; disegna(); window.scrollTo(0, 0); }
+function disegna(){
+  const el = document.getElementById('vista');
+  if((vistaAttiva === 'compila' || vistaAttiva === 'invio') && !archivio.checklist[corrente]) vistaAttiva = 'elenco';
+  document.getElementById('btnElenco').style.visibility = vistaAttiva === 'elenco' ? 'hidden' : 'visible';
+  if(vistaAttiva === 'compila') el.innerHTML = vistaCompila();
+  else if(vistaAttiva === 'invio') el.innerHTML = vistaInvio();
+  else if(vistaAttiva === 'impostazioni') el.innerHTML = vistaImpostazioni();
+  else el.innerHTML = vistaElenco();
+  disegnaChips();
+  disegnaBarra();
+}
+
+// funzionamento offline quando l'app e' pubblicata in HTTPS
+if('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')){
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+// per il collaudo automatico
+window.CKM = { caricaTesto, apri, rispondi, nota, concludi, preparaInvio, impostaAuditor, destinatario, risposta, sha256Hex, sha256Js, contaRisposte,
+               archivio: () => archivio, corrente: () => corrente };
+disegna();
+</script>
+</body>
+</html>
