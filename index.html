@@ -130,6 +130,7 @@
 // hash: SHA-256 esadecimale dei byte UTF-8 di payload}.
 // ---------------------------------------------------------------------------
 const FORMATO = 'VEGA-CL';
+const VERSIONE_APP = 'v3';     // come VERSIONE in sw.js, si vede in Impostazioni
 const VERSIONE_FORMATO = 2;
 const CHIAVE_ARCHIVIO = 'qmsaw_ckm_v1';
 const ESITI = [['Conforme', 'ok'], ['NC', 'nc'], ['N.A.', 'na']];
@@ -760,6 +761,7 @@ function vistaImpostazioni(){
     <label class="field-label" for="inAud">Auditor (grado, cognome e nome)</label>
     <input type="text" id="inAud" value="${esc(imp.auditor)}" oninput="archivio.impostazioni.auditor=this.value;salvaArchivio()">
     <p style="margin-top:14px;">I dati restano solo su questo telefono fino all'invio. Su iPhone usare l'app aggiunta alla schermata Home.</p>
+    <p class="mono" style="font-size:11.5px;">Versione dell'app: ${esc(VERSIONE_APP)} &middot; formato dei file: ${VERSIONE_FORMATO}</p>
   </div>
   <button type="button" class="ghost wide" onclick="vai('elenco')">Torna all'elenco</button>`;
 }
@@ -802,10 +804,17 @@ function disegna(){
 
 // funzionamento offline quando l'app e' pubblicata in HTTPS
 if('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')){
-  navigator.serviceWorker.register('sw.js').catch(() => {});
+  // quando arriva una versione nuova la pagina si ricarica da sola, una volta:
+  // il lavoro e' gia' salvato sul telefono
+  const ceraGia = !!navigator.serviceWorker.controller;
+  let ricaricata = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if(ceraGia && !ricaricata){ ricaricata = true; location.reload(); }
+  });
+  navigator.serviceWorker.register('sw.js').then(reg => reg.update()).catch(() => {});
 }
 // per il collaudo automatico
-window.CKM = { caricaTesto, apri, vai, rispondi, nota, concludi, preparaInvio, impostaAuditor, destinatario, risposta, sha256Hex, sha256Js, contaRisposte,
+window.CKM = { versioneApp: VERSIONE_APP, caricaTesto, apri, vai, rispondi, nota, concludi, preparaInvio, impostaAuditor, destinatario, risposta, sha256Hex, sha256Js, contaRisposte,
                aggiungiFoto, togliFoto, fotoDellaChecklist, eliminaChecklist, caricaInvio,
                testoInvio: async () => fileInMemoria[corrente] ? await fileInMemoria[corrente].text() : null,
                dimenticaFileInMemoria: () => { for(const k in fileInMemoria) delete fileInMemoria[k]; },
