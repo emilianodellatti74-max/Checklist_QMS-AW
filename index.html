@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data:; manifest-src 'self'; worker-src 'self'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data: blob:; manifest-src 'self'; worker-src 'self'">
 <meta name="theme-color" content="#1B2430">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Checklist QMS-AW">
@@ -79,6 +79,12 @@
   .esiti button.sel.nc{background:var(--red);border-color:var(--red);color:#fff;}
   .esiti button.sel.na{background:var(--locked-text);border-color:var(--locked-text);color:#fff;}
   .errore{font-size:12px;color:var(--red);margin-top:5px;}
+  .foto-riga{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px;}
+  .foto-riga button.foto{background:var(--panel);color:var(--ink);border-color:var(--line);font-size:13px;padding:8px 12px;min-height:40px;}
+  .mini{position:relative;width:64px;height:64px;border-radius:3px;overflow:hidden;border:1px solid var(--line);background:var(--locked-bg);}
+  .mini img{width:100%;height:100%;object-fit:cover;display:block;}
+  .mini button{position:absolute;top:2px;right:2px;min-height:0;width:22px;height:22px;padding:0;border-radius:50%;font-size:14px;line-height:20px;background:rgba(27,36,48,.8);border:none;color:#fff;}
+  .tag.foto{background:var(--amber-soft);color:var(--amber);}
 
   .barra{position:fixed;left:0;right:0;bottom:0;background:var(--panel);border-top:1.5px solid var(--ink);padding:10px 14px calc(10px + env(safe-area-inset-bottom));z-index:10;}
   .barra .dentro{max-width:760px;margin:0 auto;display:flex;align-items:center;gap:12px;}
@@ -111,6 +117,7 @@
 <div id="barra"></div>
 <div id="avviso"></div>
 <input type="file" id="fileInput" accept=".txt,.json,text/plain,application/json" hidden>
+<input type="file" id="fotoInput" accept="image/*" multiple hidden>
 
 <script>
 'use strict';
@@ -123,7 +130,7 @@
 // hash: SHA-256 esadecimale dei byte UTF-8 di payload}.
 // ---------------------------------------------------------------------------
 const FORMATO = 'VEGA-CL';
-const VERSIONE_FORMATO = 1;
+const VERSIONE_FORMATO = 2;
 const CHIAVE_ARCHIVIO = 'qmsaw_ckm_v1';
 const ESITI = [['Conforme', 'ok'], ['NC', 'nc'], ['N.A.', 'na']];
 
@@ -146,6 +153,86 @@ function salvaArchivio(){
 }
 // chiede al sistema di non cancellare i dati dell'app (utile su iOS e Android)
 if(navigator.storage && navigator.storage.persist){ navigator.storage.persist().catch(() => {}); }
+
+// ---------- foto e file pronti: IndexedDB (localStorage e' troppo piccolo) ----------
+// store "foto": {id, chiave (checklist), voce (id del requisito), blob, tipo, scattata}
+// store "invii": {chiave, nome, blob} = file pronto da mandare
+const FOTO_LATO_MAX = 1600;   // pixel del lato lungo
+const FOTO_QUALITA = 0.72;    // JPEG
+const MB_AVVISO = 10;         // oltre questa dimensione la posta potrebbe rifiutare il file
+let dbPromessa = null;
+const urlMiniature = {};      // id foto -> indirizzo blob: per le miniature
+const fileInMemoria = {};     // chiave checklist -> File pronto (serve subito al menu Condividi)
+let voceFoto = null;          // requisito a cui aggiungere le foto scelte
+
+function apriDb(){
+  if(!dbPromessa){
+    dbPromessa = new Promise((ok, ko) => {
+      const r = indexedDB.open('qmsaw_ckm', 1);
+      r.onupgradeneeded = () => {
+        const d = r.result;
+        const s = d.createObjectStore('foto', { keyPath: 'id' });
+        s.createIndex('chiave', 'chiave');
+        d.createObjectStore('invii', { keyPath: 'chiave' });
+      };
+      r.onsuccess = () => ok(r.result);
+      r.onerror = () => ko(r.error || new Error('Memoria delle foto non disponibile.'));
+    });
+  }
+  return dbPromessa;
+}
+async function dbFai(store, modo, azione){
+  const d = await apriDb();
+  return new Promise((ok, ko) => {
+    const t = d.transaction(store, modo);
+    const s = t.objectStore(store);
+    let esito;
+    const r = azione(s);
+    if(r) r.onsuccess = () => { esito = r.result; };
+    t.oncomplete = () => ok(esito);
+    t.onerror = t.onabort = () => ko(t.error || new Error('Memoria del telefono non disponibile.'));
+  });
+}
+const fotoSalva = rec => dbFai('foto', 'readwrite', s => s.put(rec));
+const fotoLeggi = id => dbFai('foto', 'readonly', s => s.get(id));
+const fotoElimina = id => dbFai('foto', 'readwrite', s => s.delete(id));
+const fotoDellaChecklist = chiave => dbFai('foto', 'readonly', s => s.index('chiave').getAll(chiave));
+const invioSalva = rec => dbFai('invii', 'readwrite', s => s.put(rec));
+const invioLeggi = chiave => dbFai('invii', 'readonly', s => s.get(chiave));
+const invioElimina = chiave => dbFai('invii', 'readwrite', s => s.delete(chiave));
+
+// riduce la foto a FOTO_LATO_MAX pixel e la ricomprime in JPEG
+async function comprimiFoto(file){
+  const url = URL.createObjectURL(file);
+  try{
+    const img = await new Promise((ok, ko) => {
+      const i = new Image();
+      i.onload = () => ok(i);
+      i.onerror = () => ko(new Error('Formato della foto non riconosciuto.'));
+      i.src = url;
+    });
+    const k = Math.min(1, FOTO_LATO_MAX / Math.max(img.naturalWidth, img.naturalHeight));
+    const cv = document.createElement('canvas');
+    cv.width = Math.max(1, Math.round(img.naturalWidth * k));
+    cv.height = Math.max(1, Math.round(img.naturalHeight * k));
+    cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+    const blob = await new Promise(ok => cv.toBlob(ok, 'image/jpeg', FOTO_QUALITA));
+    if(!blob) throw new Error('Conversione della foto non riuscita.');
+    return blob;
+  }finally{ URL.revokeObjectURL(url); }
+}
+function nuovoIdFoto(){
+  return 'f' + esadecimale(crypto.getRandomValues(new Uint8Array(8)));
+}
+function inBase64(blob){
+  return new Promise((ok, ko) => {
+    const r = new FileReader();
+    r.onload = () => ok(String(r.result).split(',')[1] || '');
+    r.onerror = () => ko(new Error('Foto non leggibile.'));
+    r.readAsDataURL(blob);
+  });
+}
+function mb(n){ return (n / 1048576).toFixed(n < 10485760 ? 1 : 0).replace('.', ',') + ' MB'; }
 
 function esc(v){
   return String(v === null || v === undefined ? '' : v)
@@ -257,13 +344,15 @@ async function caricaTesto(testo){
   if(prima){
     m.voci.forEach(v => {
       const r = prima.risposte[v.id];
-      if(r && !r.ufficio && (r.esito || r.nota)){ risposte[v.id] = { esito: r.esito, nota: r.nota }; recuperate++; }
+      if(r && !r.ufficio && (r.esito || r.nota || (r.foto && r.foto.length))){ risposte[v.id] = { esito: r.esito || '', nota: r.nota || '', foto: r.foto || [] }; recuperate++; }
     });
   }
   archivio.checklist[chiave] = {
     modello: m, risposte, inizio: prima ? prima.inizio : null,
     caricata: oraLocale(), stato: 'compilazione', invio: null, inviata: null
   };
+  delete fileInMemoria[chiave];
+  invioElimina(chiave).catch(() => {});
   salvaArchivio();
   return { chiave, recuperate, sostituita: !!prima };
 }
@@ -297,15 +386,26 @@ function contaRisposte(cl){
     else if(r.esito === 'NC'){ c.nc++; if(!String(r.nota || '').trim()) c.ncSenzaNota++; }
     else if(r.esito === 'N.A.') c.na++;
     else c.mancanti++;
+    c.foto = (c.foto || 0) + (r.foto ? r.foto.length : 0);
   });
+  c.foto = c.foto || 0;
   return c;
 }
 // una modifica dopo la preparazione del file richiede di prepararlo di nuovo
 function modificata(cl){
   if(!cl.inizio) cl.inizio = oraLocale();
+  if(cl.invio){ delete fileInMemoria[corrente]; invioElimina(corrente).catch(() => {}); }
   cl.invio = null;
   if(cl.inviata){ cl.giaInviata = cl.inviata; cl.inviata = null; }
   cl.stato = 'compilazione';
+}
+function ridisegnaRequisito(id){
+  const cl = archivio.checklist[corrente];
+  const el = document.getElementById('r_' + id);
+  const v = cl.modello.voci.find(x => String(x.id) === String(id));
+  if(el && v) el.outerHTML = htmlRequisito(v, cl);
+  disegnaBarra();
+  disegnaChips();
 }
 function rispondi(id, esito){
   const cl = archivio.checklist[corrente];
@@ -315,11 +415,65 @@ function rispondi(id, esito){
   cl.risposte[id] = r;
   modificata(cl);
   salvaArchivio();
-  const el = document.getElementById('r_' + id);
-  const v = cl.modello.voci.find(x => String(x.id) === String(id));
-  if(el && v) el.outerHTML = htmlRequisito(v, cl);
-  disegnaBarra();
-  disegnaChips();
+  ridisegnaRequisito(id);
+}
+
+// ---------- foto dei requisiti ----------
+function scegliFoto(id){
+  voceFoto = id;
+  document.getElementById('fotoInput').click();
+}
+document.getElementById('fotoInput').addEventListener('change', async ev => {
+  const files = Array.from(ev.target.files || []);
+  ev.target.value = '';
+  if(!files.length || voceFoto === null) return;
+  avviso('Salvataggio della foto...');
+  const n = await aggiungiFoto(voceFoto, files);
+  if(n) avviso(n === 1 ? 'Foto aggiunta.' : n + ' foto aggiunte.');
+});
+async function aggiungiFoto(voce, files){
+  const cl = archivio.checklist[corrente];
+  let aggiunte = 0;
+  for(const f of files){
+    try{
+      const blob = await comprimiFoto(f);
+      const id = nuovoIdFoto();
+      await fotoSalva({ id, chiave: corrente, voce, blob, tipo: 'image/jpeg', scattata: oraLocale(new Date(f.lastModified || Date.now())) });
+      urlMiniature[id] = URL.createObjectURL(blob);
+      const r = cl.risposte[voce] || { esito:'', nota:'' };
+      r.foto = (r.foto || []).concat(id);
+      delete r.ufficio;
+      cl.risposte[voce] = r;
+      aggiunte++;
+    }catch(e){ avviso('Foto non aggiunta: ' + e.message, true); }
+  }
+  if(aggiunte){ modificata(cl); salvaArchivio(); ridisegnaRequisito(voce); }
+  return aggiunte;
+}
+async function togliFoto(voce, id, senzaConferma){
+  if(!senzaConferma && !confirm('Eliminare questa foto?')) return;
+  const cl = archivio.checklist[corrente];
+  const r = cl.risposte[voce];
+  if(!r || !r.foto) return;
+  r.foto = r.foto.filter(x => x !== id);
+  delete r.ufficio;
+  await fotoElimina(id).catch(() => {});
+  if(urlMiniature[id]){ URL.revokeObjectURL(urlMiniature[id]); delete urlMiniature[id]; }
+  modificata(cl);
+  salvaArchivio();
+  ridisegnaRequisito(voce);
+}
+// miniature della checklist aperta: le foto stanno in IndexedDB, si leggono dopo il disegno
+async function caricaMiniature(){
+  if(!corrente) return;
+  try{
+    const elenco = await fotoDellaChecklist(corrente);
+    elenco.forEach(rec => { if(!urlMiniature[rec.id] && rec.blob) urlMiniature[rec.id] = URL.createObjectURL(rec.blob); });
+    document.querySelectorAll('.mini[data-foto] img').forEach(img => {
+      const u = urlMiniature[img.parentNode.getAttribute('data-foto')];
+      if(u && img.getAttribute('src') !== u) img.src = u;
+    });
+  }catch(e){}
 }
 function nota(id, testo){
   const cl = archivio.checklist[corrente];
@@ -356,6 +510,10 @@ function htmlRequisito(v, cl){
     </div>
     <textarea placeholder="Note ed evidenze${r.esito === 'NC' ? ' (obbligatorie per una NC)' : ''}" oninput="nota(${JSON.stringify(v.id)}, this.value)">${esc(r.nota || '')}</textarea>
     <div class="errore" id="err_${esc(v.id)}" style="display:${r.esito === 'NC' && !String(r.nota || '').trim() ? 'block' : 'none'}">Descrivi il rilievo: per una NC la nota è obbligatoria.</div>
+    <div class="foto-riga">
+      <button type="button" class="foto" onclick="scegliFoto(${JSON.stringify(v.id)})">&#128247; Foto</button>
+      ${(r.foto || []).map(id => `<div class="mini" data-foto="${esc(id)}"><img alt="foto"${urlMiniature[id] ? ` src="${urlMiniature[id]}"` : ''}><button type="button" aria-label="Elimina la foto" onclick="togliFoto(${JSON.stringify(v.id)}, '${esc(id)}')">&times;</button></div>`).join('')}
+    </div>
   </div>`;
 }
 function visibile(v, cl){
@@ -420,25 +578,57 @@ async function concludi(){
   vai('invio');
   return { ok:true, nome };
 }
-// file da inviare: ogni preparazione e' una compilazione nuova, con un uuid nuovo
+// file da inviare: ogni preparazione e' una compilazione nuova, con un uuid nuovo.
+// Le foto entrano nello stesso file (payload.foto, in base64) e sono coperte
+// dall'impronta come il resto. Il file pronto sta in memoria e in IndexedDB.
 async function preparaInvio(cl){
+  const chiave = corrente;
   const m = cl.modello, c = contaRisposte(cl);
+  const foto = [], incluse = {};
+  for(const v of m.voci){
+    const r = cl.risposte[v.id] || {};
+    for(const id of (r.foto || [])){
+      const rec = await fotoLeggi(id).catch(() => null);
+      if(rec && rec.blob){
+        foto.push({ id, voce: v.id, tipo: rec.tipo || 'image/jpeg', scattata: rec.scattata || '', dati: await inBase64(rec.blob) });
+        incluse[id] = true;
+      }
+    }
+  }
   const payload = {
     uuid: nuovoUuid(), tipoChecklist: 'audit', idAudit: m.idAudit, nrRapporto: m.nrRapporto, emesso: m.emesso,
     processo: m.processo, flotta: m.flotta || '', auditor: archivio.impostazioni.auditor || '',
     dispositivo: descriviDispositivo(), inizio: cl.inizio || oraLocale(), fine: oraLocale(),
-    conteggi: { conformi: c.ok, nc: c.nc, na: c.na },
-    risposte: m.voci.map(v => { const r = cl.risposte[v.id] || {}; return { id: v.id, esito: r.esito || '', nota: String(r.nota || '').trim() }; })
+    conteggi: { conformi: c.ok, nc: c.nc, na: c.na, foto: foto.length },
+    risposte: m.voci.map(v => {
+      const r = cl.risposte[v.id] || {};
+      return { id: v.id, esito: r.esito || '', nota: String(r.nota || '').trim(), foto: (r.foto || []).filter(id => incluse[id]) };
+    }),
+    foto
   };
   const testo = JSON.stringify(payload);
   const busta = { formato: FORMATO, versioneFormato: VERSIONE_FORMATO, tipo: 'compilazione', payload: testo, hash: await sha256Hex(testo) };
   const ora = new Date(), p = n => String(n).padStart(2, '0');
   const nome = 'CL_' + String(m.nrRapporto || m.idAudit).replace(/[\\/:*?"<>|\s]/g, '-') + '_' +
                ora.getFullYear() + p(ora.getMonth() + 1) + p(ora.getDate()) + '-' + p(ora.getHours()) + p(ora.getMinutes()) + '.txt';
-  cl.invio = { uuid: payload.uuid, nome, auditor: payload.auditor, testo: JSON.stringify(busta), preparato: oraLocale() };
+  const file = new File([JSON.stringify(busta)], nome, { type: 'text/plain' });
+  fileInMemoria[chiave] = file;
+  await invioSalva({ chiave, nome, blob: file });
+  cl.invio = { uuid: payload.uuid, nome, auditor: payload.auditor, preparato: oraLocale(), dimensione: file.size, foto: foto.length };
   cl.stato = 'pronta';
   salvaArchivio();
   return nome;
+}
+// dopo una riapertura dell'app il file pronto si rilegge da IndexedDB
+async function caricaInvio(chiave){
+  const cl = archivio.checklist[chiave];
+  const rec = await invioLeggi(chiave).catch(() => null);
+  if(rec && rec.blob && cl && cl.invio && rec.nome === cl.invio.nome){
+    fileInMemoria[chiave] = new File([rec.blob], rec.nome, { type: 'text/plain' });
+  }else if(cl && cl.invio){
+    cl.invio = null; cl.stato = 'compilazione'; salvaArchivio();
+    avviso('Il file pronto non si trova piu\': premi di nuovo Concludi.', true);
+  }
 }
 
 // ---------- invio ----------
@@ -446,16 +636,21 @@ function vistaInvio(){
   const cl = archivio.checklist[corrente];
   const m = cl.modello, c = contaRisposte(cl), imp = archivio.impostazioni;
   if(!cl.invio) return '<div class="vuoto">Il file non è pronto: torna alla checklist e premi Concludi.</div>';
+  if(!fileInMemoria[corrente]) return '<div class="vuoto">Caricamento del file pronto...</div>';
+  const dim = cl.invio.dimensione || fileInMemoria[corrente].size;
   return intestazione(m) + `
   <div class="card">
     <h2>Checklist pronta per l'invio</h2>
-    <p>Il file <span class="mono">${esc(cl.invio.nome)}</span> contiene tutti gli esiti. Invialo all'ufficio qualità:
+    <p>Il file <span class="mono">${esc(cl.invio.nome)}</span> contiene tutti gli esiti${cl.invio.foto ? ' e le foto' : ''}. Invialo all'ufficio qualità:
        il gestionale lo importa con <b>Importa dal telefono</b>.</p>
     <div class="riepilogo">
       <div><span>Conformi</span><b>${c.ok}</b></div>
       <div><span>NC</span><b>${c.nc}</b></div>
       <div><span>N.A.</span><b>${c.na}</b></div>
+      <div><span>Foto</span><b>${cl.invio.foto || 0}</b></div>
+      <div><span>Dimensione del file</span><b>${mb(dim)}</b></div>
     </div>
+    ${dim > MB_AVVISO * 1048576 ? `<div class="banner">Il file supera ${MB_AVVISO} MB: la posta potrebbe rifiutarlo. Se succede, togli qualche foto e rimandalo.</div>` : ''}
     <label class="field-label" for="inAuditor">Auditor (grado, cognome e nome)</label>
     <input type="text" id="inAuditor" value="${esc(imp.auditor)}" onchange="impostaAuditor(this.value)">
     <label class="field-label">Destinatario</label>
@@ -485,8 +680,7 @@ function destinatario(cl){
   return archivio.impostazioni.email || (cl && cl.modello.emailRitorno) || '';
 }
 function fileInvio(){
-  const cl = archivio.checklist[corrente];
-  return new File([cl.invio.testo], cl.invio.nome, { type: 'text/plain' });
+  return fileInMemoria[corrente] || null;
 }
 function segnaInviata(){
   const cl = archivio.checklist[corrente];
@@ -500,6 +694,7 @@ async function inviaEmail(){
   const oggetto = '[CHECKLIST] Audit ' + cl.modello.nrRapporto;
   const email = destinatario(cl);
   const f = fileInvio();
+  if(!f) return;
   if(navigator.canShare && navigator.canShare({ files: [f] })){
     try{
       await navigator.share({ files: [f], title: oggetto, text: oggetto + (email ? ' - destinatario ' + email : '') });
@@ -514,8 +709,9 @@ async function inviaEmail(){
 }
 function salvaFile(){
   const cl = archivio.checklist[corrente];
-  if(!cl.invio) return;
-  const url = URL.createObjectURL(new Blob([cl.invio.testo], { type: 'text/plain' }));
+  const f = fileInvio();
+  if(!cl.invio || !f) return;
+  const url = URL.createObjectURL(f);
   const a = document.createElement('a');
   a.href = url; a.download = cl.invio.nome;
   document.body.appendChild(a); a.click();
@@ -546,7 +742,7 @@ function vistaElenco(){
       <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;">
         <h2>Audit <span class="mono">${esc(m.nrRapporto)}</span></h2><span class="stato ${stato[0]}">${esc(stato[1])}</span>
       </div>
-      <p>${esc(m.processo)}${m.flotta ? ' · flotta ' + esc(m.flotta) : ''} — ${c.tot - c.mancanti} di ${c.tot} valutati${c.nc ? ', ' + c.nc + ' NC' : ''}</p>
+      <p>${esc(m.processo)}${m.flotta ? ' · flotta ' + esc(m.flotta) : ''} — ${c.tot - c.mancanti} di ${c.tot} valutati${c.nc ? ', ' + c.nc + ' NC' : ''}${c.foto ? ', ' + c.foto + ' foto' : ''}</p>
       <div class="riga-azioni">
         <button type="button" onclick="apri('${k}')">Apri</button>
         <button type="button" class="ghost" onclick="elimina('${k}')">Elimina</button>
@@ -571,8 +767,20 @@ function elimina(k){
   const cl = archivio.checklist[k];
   const avv = cl && !cl.inviata ? '\nNon è ancora stata inviata: gli esiti andranno persi.' : '';
   if(!confirm('Eliminare dal telefono la checklist dell\'audit ' + (cl ? cl.modello.nrRapporto : '') + '?' + avv)) return;
+  eliminaChecklist(k).then(disegna);
+}
+// toglie dal telefono la checklist con le sue foto e il file pronto
+async function eliminaChecklist(k){
   delete archivio.checklist[k];
-  salvaArchivio(); disegna();
+  salvaArchivio();
+  delete fileInMemoria[k];
+  try{
+    for(const rec of await fotoDellaChecklist(k)){
+      await fotoElimina(rec.id);
+      if(urlMiniature[rec.id]){ URL.revokeObjectURL(urlMiniature[rec.id]); delete urlMiniature[rec.id]; }
+    }
+    await invioElimina(k);
+  }catch(e){}
 }
 function apri(k){ corrente = k; filtro = 'tutti'; vai('compila'); }
 function vai(v){ vistaAttiva = v; disegna(); window.scrollTo(0, 0); }
@@ -586,6 +794,10 @@ function disegna(){
   else el.innerHTML = vistaElenco();
   disegnaChips();
   disegnaBarra();
+  if(vistaAttiva === 'compila') caricaMiniature();
+  if(vistaAttiva === 'invio' && archivio.checklist[corrente].invio && !fileInMemoria[corrente]){
+    caricaInvio(corrente).then(() => { if(vistaAttiva === 'invio') disegna(); });
+  }
 }
 
 // funzionamento offline quando l'app e' pubblicata in HTTPS
@@ -593,7 +805,10 @@ if('serviceWorker' in navigator && (location.protocol === 'https:' || location.h
   navigator.serviceWorker.register('sw.js').catch(() => {});
 }
 // per il collaudo automatico
-window.CKM = { caricaTesto, apri, rispondi, nota, concludi, preparaInvio, impostaAuditor, destinatario, risposta, sha256Hex, sha256Js, contaRisposte,
+window.CKM = { caricaTesto, apri, vai, rispondi, nota, concludi, preparaInvio, impostaAuditor, destinatario, risposta, sha256Hex, sha256Js, contaRisposte,
+               aggiungiFoto, togliFoto, fotoDellaChecklist, eliminaChecklist, caricaInvio,
+               testoInvio: async () => fileInMemoria[corrente] ? await fileInMemoria[corrente].text() : null,
+               dimenticaFileInMemoria: () => { for(const k in fileInMemoria) delete fileInMemoria[k]; },
                archivio: () => archivio, corrente: () => corrente };
 disegna();
 </script>
