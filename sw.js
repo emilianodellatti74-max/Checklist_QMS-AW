@@ -1,7 +1,7 @@
 // Funzionamento offline dell'app Checklist QMS-AW.
 // A ogni aggiornamento dei file aumentare VERSIONE (e VERSIONE_APP in
 // index.html): altrimenti i telefoni continuano a usare la copia in memoria.
-const VERSIONE = 'qmsaw-checklist-v3';
+const VERSIONE = 'qmsaw-checklist-v4';
 const FILE = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png'];
 
 // I file si scaricano con cache 'reload' e con la versione nell'indirizzo:

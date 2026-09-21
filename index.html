@@ -117,7 +117,7 @@
 <div id="barra"></div>
 <div id="avviso"></div>
 <input type="file" id="fileInput" accept=".txt,.json,text/plain,application/json" hidden>
-<input type="file" id="fotoInput" accept="image/*" multiple hidden>
+<input type="file" id="fotoInput" accept="image/*" capture="environment" hidden>
 
 <script>
 'use strict';
@@ -130,7 +130,7 @@
 // hash: SHA-256 esadecimale dei byte UTF-8 di payload}.
 // ---------------------------------------------------------------------------
 const FORMATO = 'VEGA-CL';
-const VERSIONE_APP = 'v3';     // come VERSIONE in sw.js, si vede in Impostazioni
+const VERSIONE_APP = 'v4';     // come VERSIONE in sw.js, si vede in Impostazioni
 const VERSIONE_FORMATO = 2;
 const CHIAVE_ARCHIVIO = 'qmsaw_ckm_v1';
 const ESITI = [['Conforme', 'ok'], ['NC', 'nc'], ['N.A.', 'na']];
